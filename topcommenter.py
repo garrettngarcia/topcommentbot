@@ -5,6 +5,7 @@ import imagehash
 import redis
 import time
 import logging
+import sys
 from imgurpython import ImgurClient
 from PIL import Image
 from io import BytesIO
@@ -47,6 +48,9 @@ class RateLimitedImgurClient(ImgurClient):
                 if self.credits['UserRemaining'] and self.credits['ClientRemaining']:
                     if int(self.credits['UserRemaining']) > self.credit_lower_limit and int(self.credits['ClientRemaining']) > self.credit_lower_limit:
                         return True
+
+                logging.warning("Rate Limit hit.\tUser credits remaining: %s\tApp credits remaining: %s",
+                                    self.credits['UserRemaining'], self.credits['ClientRemaining'])
             return False
 
         while True:
@@ -56,6 +60,7 @@ class RateLimitedImgurClient(ImgurClient):
                     return result
                 else:
                     # Sleep before trying again
+                    logging.info('Sleeping for 15 minutes')
                     time.sleep(60*15)
             else:
                 self.credits = self.get_credits()
@@ -217,7 +222,7 @@ def comment_on_posts(post_list):
 def main():
     global r, client
 
-    logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s', level='INFO', datefmt='%m/%d/%Y %I:%M:%S %p')
+    logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s', level='INFO', datefmt='%m/%d/%Y %I:%M:%S %p', filename='topcommenter.log')
 
     config = get_config()
     config.read('auth.ini')
@@ -244,4 +249,10 @@ def main():
             time.sleep(120)
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(0)
+    except:
+        logging.exception("Script exited due to exception")
+        sys.exit(1)
