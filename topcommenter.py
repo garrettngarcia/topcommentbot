@@ -9,13 +9,42 @@ from io import BytesIO
 from helpers import get_config
 from imgurpython.imgur.models.gallery_album import GalleryAlbum
 from imgurpython.imgur.models.gallery_image import GalleryImage
-from imgurpython.helpers.error import ImgurClientError
+from imgurpython.helpers.error import ImgurClientError, ImgurClientRateLimitError
 
 # Redis client
 r = None
 
 # Imgur client
 client = None
+
+
+# This class blocks and retries when the rate limit is close to being spent.  Not thread-safe.
+class RateLimitedImgurClient(ImgurClient):
+    def __init__(self, client_id, client_secret, access_token=None, refresh_token=None, mashape_key=None, credit_lower_limit=10):
+        super(RateLimitedImgurClient, self).__init__(client_id, client_secret, access_token, refresh_token, mashape_key)
+        self.credit_lower_limit = credit_lower_limit
+
+    def make_request(self, method, route, data=None, force_anon=False):
+        def run_make_request():
+            try:
+                return super(RateLimitedImgurClient, self).make_request(method, route, data, force_anon)
+            except ImgurClientRateLimitError:
+                logging.warning("Rate Limit hit.\tUser credits remaining: %s\tApp credits remaining: %s", self.credits['UserRemaining'], self.credits['ClientRemaining'])
+                return None
+
+        if route == 'credits':
+            return super(RateLimitedImgurClient, self).make_request(method, route, data, force_anon)
+
+        while True:
+            if int(self.credits['UserRemaining']) > self.credit_lower_limit and int(self.credits['ClientRemaining']) > self.credit_lower_limit:
+                result = run_make_request()
+                if result:
+                    return result
+                else:
+                    # Sleep before trying again
+                    time.sleep(60*15)
+            else:
+                self.credits = self.get_credits()
 
 
 class Post:
@@ -183,7 +212,7 @@ def main():
     client_secret = config.get('credentials', 'client_secret')
     refresh_token = config.get('credentials', 'refresh_token')
 
-    client = ImgurClient(client_id, client_secret, None, refresh_token)
+    client = RateLimitedImgurClient(client_id, client_secret, None, refresh_token)
     r = redis.StrictRedis(host='localhost', port=6379, db=0)
 
     for i in range(60):
@@ -191,17 +220,13 @@ def main():
         top_posts = get_posts('top', pages=1)
         save_top_comment_info(top_posts)
 
-        logging.info(u"Saved %d new images to the database", len(top_posts))
-        logging.debug(u"User Credit Limit Remaining: %s", client.credits['UserRemaining'])
-        logging.debug(u"Client Credit Limit Remaining: %s", client.credits['ClientRemaining'])
+        logging.info(u"Saved %d new posts to the database", len(top_posts))
 
         for j in range(10):
             # Scan for user posts
             user_posts = get_posts('user', pages=3)
             comment_on_posts(user_posts)
             logging.info(u"Scanned 3 pages of User Sub, found %d new posts", len(user_posts))
-            logging.debug(u"User Credit Limit Remaining: %s", client.credits['UserRemaining'])
-            logging.debug(u"Client Credit Limit Remaining: %s", client.credits['ClientRemaining'])
             time.sleep(120)
 
 if __name__ == '__main__':
