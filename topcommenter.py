@@ -31,12 +31,24 @@ class RateLimitedImgurClient(ImgurClient):
             except ImgurClientRateLimitError:
                 logging.warning("Rate Limit hit.\tUser credits remaining: %s\tApp credits remaining: %s", self.credits['UserRemaining'], self.credits['ClientRemaining'])
                 return None
+            except ImgurClientError as e:
+                if e.status_code == 500:
+                    logging.warning("Imgur is over capacity.")
+                    return None
+                else:
+                    raise
 
-        if route == 'credits':
-            return super(RateLimitedImgurClient, self).make_request(method, route, data, force_anon)
+        def is_ok_to_make_request():
+            if route == 'credits':
+                return True
+            if hasattr(self, 'credits'):
+                if self.credits['UserRemaining'] and self.credits['ClientRemaining']:
+                    if int(self.credits['UserRemaining']) > self.credit_lower_limit and int(self.credits['ClientRemaining']) > self.credit_lower_limit:
+                        return True
+            return False
 
         while True:
-            if int(self.credits['UserRemaining']) > self.credit_lower_limit and int(self.credits['ClientRemaining']) > self.credit_lower_limit:
+            if is_ok_to_make_request():
                 result = run_make_request()
                 if result:
                     return result
