@@ -48,21 +48,19 @@ class RateLimitedImgurClient(ImgurClient):
                 if self.credits['UserRemaining'] and self.credits['ClientRemaining']:
                     if int(self.credits['UserRemaining']) > self.credit_lower_limit and int(self.credits['ClientRemaining']) > self.credit_lower_limit:
                         return True
-
-                logging.warning("Rate Limit hit.\tUser credits remaining: %s\tApp credits remaining: %s",
-                                    self.credits['UserRemaining'], self.credits['ClientRemaining'])
             return False
 
         while True:
             if is_ok_to_make_request():
                 result = run_make_request()
-                if result:
+                if result is not None:
                     return result
                 else:
                     # Sleep before trying again
-                    logging.info('Sleeping for 15 minutes')
-                    time.sleep(60*15)
+                    logging.info('Sleeping for 10 minutes')
+                    time.sleep(60*10)
             else:
+                logging.info("Checking credits")
                 self.credits = self.get_credits()
 
 
@@ -202,6 +200,7 @@ def get_posts(section, pages=1):
 
 def save_top_comment_info(post_list):
     for p in post_list:
+        logging.debug("Saving comment %s to %s", p.top_comment, p.post_hash)
         r.set(p.post_hash, p.top_comment)
         r.set(p.post_id, p.post_hash)
 
@@ -223,6 +222,7 @@ def main():
     global r, client
 
     logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s', level='INFO', datefmt='%m/%d/%Y %I:%M:%S %p', filename='topcommenter.log')
+    logging.info("Starting...")
 
     config = get_config()
     config.read('auth.ini')
@@ -244,6 +244,8 @@ def main():
         for j in range(10):
             # Scan for user posts
             user_posts = get_posts('user', pages=3)
+            if not user_posts:
+                logging.info("No new posts found in User Sub")
             comment_on_posts(user_posts)
             logging.info(u"Scanned 3 pages of User Sub, found %d new posts", len(user_posts))
             time.sleep(120)
@@ -252,6 +254,7 @@ if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
+        logging.info("Quitting")
         sys.exit(0)
     except:
         logging.exception("Script exited due to exception")
