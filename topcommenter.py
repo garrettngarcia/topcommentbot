@@ -55,13 +55,11 @@ class RateLimitedImgurClient(ImgurClient):
                 result = run_make_request()
                 if result is not None:
                     return result
-                else:
-                    # Sleep before trying again
-                    logging.info('Sleeping for 10 minutes')
-                    time.sleep(60*10)
-            else:
-                logging.info("Checking credits")
-                self.credits = self.get_credits()
+            # Sleep before trying again
+            logging.info('Sleeping for 10 minutes')
+            time.sleep(60 * 10)
+            logging.info("Checking credits")
+            self.credits = self.get_credits()
 
 
 class Post:
