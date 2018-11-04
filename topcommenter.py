@@ -250,6 +250,7 @@ def main():
 
 if __name__ == '__main__':
     try:
+        print 'got here'
         main()
     except KeyboardInterrupt:
         logging.info("Quitting")
