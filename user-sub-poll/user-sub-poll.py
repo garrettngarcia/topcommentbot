@@ -2,6 +2,7 @@
 
 import redis
 import sys
+import os
 import ConfigParser
 from gimgur import *
 
@@ -42,7 +43,7 @@ def main():
 if __name__ == '__main__':
     try:
         # Configure logging
-        logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s', level='INFO',
+        logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s', level='DEBUG',
                             datefmt='%m/%d/%Y %I:%M:%S %p')
         logging.info("Starting...")
 
@@ -55,8 +56,7 @@ if __name__ == '__main__':
 
         # Initiate client
         imgur_client = RateLimitedImgurClient(client_id, client_secret, None, refresh_token)
-        # hash_store = redis.StrictRedis(host='localhost', port=6379, db=0)
-        hash_store = HashStoreMock()
+        hash_store = redis.StrictRedis(host=os.environ["REDIS_HOST"], port=6379, db=0)
 
         # Enter the main loop
         main()

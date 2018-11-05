@@ -58,16 +58,23 @@ class RateLimitedImgurClient(ImgurClient):
             self.credits = self.get_credits()
 
     def get_items_iter(self, section, pages=1):
-        for page_num in range(pages):
-            if section == 'top':
-                image_gallery = self.gallery(section='hot', sort='top', window='day', page=page_num)
-            elif section == 'user':
-                image_gallery = self.gallery(section='user', sort='time', window='day', page=page_num)
-            else:
-                raise GimgurException(u"Unrecognized section: %s", section)
+        if section == 'hot':
+            sort_mode = 'top'
+            sleep_time = 60 * 30
+        elif section == 'user':
+            sort_mode = 'time'
+            sleep_time = 60 * 1
+        else:
+            raise GimgurException(u"Unrecognized section: %s", section)
 
-            for item in image_gallery:
-                yield item
+        while True:
+            for page_num in range(pages):
+                image_gallery = self.gallery(section=section, sort=sort_mode, window='day', page=page_num)
+
+                for item in image_gallery:
+                    yield item
+            logging.debug("Sleeping for %d seconds", sleep_time)
+            time.sleep(sleep_time)
 
 
 class Post:
@@ -77,6 +84,7 @@ class Post:
         self.imgur_client = imgur_client
         self.album = list()
         self.errors = []
+        self.top_comment = None
 
         if isinstance(gallery_item, GalleryImage):
             try:
@@ -99,7 +107,7 @@ class Post:
             except ImgurClientError as err:
                 # As far as I can tell this happens when a gallery is deleted after between the gallery call and now
                 # This happens often enough that we'll only log it as a warning
-                logging.warning(u"Exception while calling process_gallery_album(%s, %s)", unicode(self),
+                logging.warning(u"Exception while calling process_gallery_album(%s, %s)", str(self),
                                 gallery_item.link)
                 self.errors.append(err)
         else:
@@ -149,6 +157,15 @@ class Post:
     def _process_gallery_album(self, ga):
         for gi in self.imgur_client.get_album_images(ga.id):
             self._process_gallery_image(gi)
+
+    def refresh_top_comment(self, imgur_client):
+        try:
+            self.top_comment = imgur_client.gallery_item_comments(self.post_id)[0].comment
+        except ImgurClientError as err:
+            # This seems to happen with old posts.  Imgur bug.
+            logging.exception(u"Exception while calling gallery_item_comments(%s)", unicode(self.post_id))
+            self.errors.append(err)
+        return self.top_comment
 
 
 class PostImage:

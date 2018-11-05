@@ -1,0 +1,29 @@
+version: "3"
+
+services:
+  user-sub-poll:
+    build:
+      context: .
+      dockerfile: user-sub-poll/Dockerfile
+    command: python user-sub-poll.py
+    environment:
+      REDIS_HOST: redis
+    depends_on:
+      - redis
+  front-page-poll:
+    build:
+      context: .
+      dockerfile: front-page-poll/Dockerfile
+    command: python front-page-poll.py
+    environment:
+      REDIS_HOST: redis
+    depends_on:
+    - redis
+  redis:
+    image: redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+    - redis-data:/data
+
+volumes:
+  redis-data:
